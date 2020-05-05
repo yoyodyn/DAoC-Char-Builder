@@ -277,25 +277,25 @@ namespace ConsoleApp1
         {
             return new Item()
             {
-                abilities = this.abilities.Select(x => (AbilitiesType)x.Clone()).ToList(),
+                abilities = this.abilities?.Select(x => (AbilitiesType)x.Clone()).ToList(),
                 artifact = this.artifact,
                 artifcat_pre_leveled = this.artifcat_pre_leveled,
-                bonuses = this.bonuses.Select(x => (BonusType)x.Clone()).ToList(),
+                bonuses = this.bonuses?.Select(x => (BonusType)x.Clone()).ToList(),
                 bonus_level = this.bonus_level,
                 category = this.category,
                 delve_text = this.delve_text,
                 dye_type = this.dye_type,
-                flags = (FlagsType)this.flags.Clone(),
+                flags = (FlagsType)this.flags?.Clone(),
                 icon = this.icon,
                 id = this.id,
                 material = this.material,
                 name = this.name,
                 realm = this.realm,
-                requirements = (RequirementsType)this.requirements.Clone(),
+                requirements = (RequirementsType)this.requirements?.Clone(),
                 salvage_amount = this.salvage_amount,
                 sell_value = this.sell_value,
                 slot = this.slot,
-                type_data = (TypeDataType)this.type_data.Clone(),
+                type_data = (TypeDataType)this.type_data?.Clone(),
                 use_duration = this.use_duration
             };
         }
@@ -323,11 +323,16 @@ namespace ConsoleApp1
         Ring = 15,
         Mythrian = 17
     }
-    public class SlotType
+    public class SlotType : ICloneable
     {
         public Slots slot { get; set; }
         public Item item { get; set; }
         public bool locked { get; set; }
+
+        public object Clone()
+        {
+            return new SlotType() { slot = this.slot, item = (Item)this.item.Clone(), locked = this.locked };
+        }
     }
 
     public enum StatTypes
@@ -348,6 +353,12 @@ namespace ConsoleApp1
         public StatTypes stat { get; set; }
         public int statLimit { get; set; }
         public int value { get; set; }
+        public int hardCap { get; set; }
+
+        public StatType()
+        {
+            hardCap = 127;
+        }
 
         public object Clone()
         {
@@ -384,12 +395,14 @@ namespace ConsoleApp1
         Body4 = 27
     }
 
-    public class ResistType :ICloneable
+    public class ResistType : ICloneable
     {
         public ResistTypes resist { get; set; }
         public int value { get; set; }
 
         public int cap { get; set; }
+
+        public int hardCap { get; set; }
 
         public object Clone()
         {
@@ -404,7 +417,7 @@ namespace ConsoleApp1
     /// <summary>
     /// class for character creation.  Should have the stats, skills, attributes, inventory slots, etc.
     /// </summary>
-    public class Character :ICloneable
+    public class Character : ICloneable
     {
         public string characterName { get; set; }
         public List<SlotType> itemSlots { get; set; }
@@ -451,15 +464,15 @@ namespace ConsoleApp1
             stats.Add(new StatType { stat = StatTypes.Acuity });
 
             resists = new List<ResistType>();
-            resists.Add(new ResistType { resist = ResistTypes.Crush, value = 2, cap = 26 });
-            resists.Add(new ResistType { resist = ResistTypes.Slash, value = 3, cap = 26 });
-            resists.Add(new ResistType { resist = ResistTypes.Thrust, value = 0, cap = 26 });
-            resists.Add(new ResistType { resist = ResistTypes.Heat, value = 0, cap = 26 });
-            resists.Add(new ResistType { resist = ResistTypes.Cold, value = 0, cap = 26 });
-            resists.Add(new ResistType { resist = ResistTypes.Matter, value = 0, cap = 26 });
-            resists.Add(new ResistType { resist = ResistTypes.Body,value = 0, cap = 26 });
-            resists.Add(new ResistType { resist = ResistTypes.Spirit, value = 5, cap = 26 });
-            resists.Add(new ResistType { resist = ResistTypes.Energy, value = 0, cap = 26 });
+            resists.Add(new ResistType { resist = ResistTypes.Crush, value = 2, cap = 26, hardCap = 43 });
+            resists.Add(new ResistType { resist = ResistTypes.Slash, value = 3, cap = 26, hardCap = 44 });
+            resists.Add(new ResistType { resist = ResistTypes.Thrust, value = 0, cap = 26, hardCap = 42 });
+            resists.Add(new ResistType { resist = ResistTypes.Heat, value = 0, cap = 26, hardCap = 41 });
+            resists.Add(new ResistType { resist = ResistTypes.Cold, value = 0, cap = 26, hardCap = 41 });
+            resists.Add(new ResistType { resist = ResistTypes.Matter, value = 0, cap = 26, hardCap = 41 });
+            resists.Add(new ResistType { resist = ResistTypes.Body,value = 0, cap = 26, hardCap = 41 });
+            resists.Add(new ResistType { resist = ResistTypes.Spirit, value = 5, cap = 26, hardCap = 46 });
+            resists.Add(new ResistType { resist = ResistTypes.Energy, value = 0, cap = 26, hardCap = 41 });
 
             hitpoints = 0;
             power = 0;
@@ -467,6 +480,21 @@ namespace ConsoleApp1
             hitcap = 0;
             powercap = 0;
             powerpoolcap = 0;
+        }
+
+        public Character(Character toCopy)
+        {
+            characterName = toCopy.characterName;
+            hitpoints = toCopy.hitpoints;
+            power = toCopy.power;
+            powerpool = toCopy.powerpool;
+            hitcap = toCopy.hitcap;
+            powercap = toCopy.powercap;
+            powerpoolcap = toCopy.powerpoolcap;
+
+            resists = toCopy.resists.Select(x => (ResistType)x.Clone()).ToList();
+            itemSlots = toCopy.itemSlots.Select(x => (SlotType)x.Clone()).ToList();
+            stats = toCopy.stats.Select(x => (StatType)x.Clone()).ToList();
         }
 
         public List<ResistType> Resists
@@ -564,7 +592,22 @@ namespace ConsoleApp1
 
         public object Clone()
         {
-            throw new NotImplementedException();
+            return new Character(this);
+        }
+
+        public double Evaluate()
+        {
+            List<StatType> eStat = Stats;
+            List<ResistType> eResist = Resists;
+
+            double A1 = eStat.Average(x => x.hardCap);      // get the average of the stat caps
+            double A2 = eResist.Average(x => x.hardCap);    // get the average of the resist caps
+            double ratio = A1 / A2;                         // get the ratio
+
+            double S1 = eStat.Sum(x => (x.hardCap - x.value) / ratio);      // sum the stat differences and apply the ratio
+            double S2 = eResist.Sum(x => (x.hardCap - x.value));            // sum the resist differences
+
+            return S1 + S2;
         }
     }
 
@@ -572,7 +615,6 @@ namespace ConsoleApp1
     {
         public int currentIndex { get; set; }
         public List<Item> items { get; set; }
-
         public SlotType charSlot { get; set; }
     }
     class Program
@@ -636,12 +678,23 @@ namespace ConsoleApp1
                 s.item = slotItems[key].items[0];
             }
 
-            int max = 0;
-            while (true)
-            {
-                one.Evaluate();
+            double max = double.MaxValue;
+            double score = 0;
+            Character chosenOne = new Character("Initial");
+            bool looping = true;
 
-                foreach (var s in slotItems)
+            while (looping)
+            {
+                looping = false;
+                score = one.Evaluate();
+                if (score < max)
+                {
+                    chosenOne = (Character)one.Clone();
+                    Console.WriteLine($"New Best: {score}");
+                    max = score;
+                }
+
+                foreach (var s in slotItems)            // if we can complete this foreach, then it's cycled through all the items on the last slot and we are done.
                 {
                     SlotSearchType current = s.Value;
                     if (++current.currentIndex >= current.items.Count)
@@ -651,11 +704,13 @@ namespace ConsoleApp1
                     else
                     {
                         current.charSlot.item = current.items[current.currentIndex];
+                        looping = true;
                         break;
                     }
                 }
             }
 
+            Console.WriteLine($"Starting:\n{string.Join("\n", chosenOne.itemSlots.Where(x => !x.locked).Select(x => x.item.name).ToList())}\nStats:\n{string.Join("\n", chosenOne.Stats)}\nResists:\n{string.Join("\n", chosenOne.Resists)}");
 
             List<string> useFlags = new List<string>();
             //Dictionary<int, int> slotCounts = new Dictionary<int, int>();
