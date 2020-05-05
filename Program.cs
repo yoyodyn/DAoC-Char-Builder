@@ -54,6 +54,57 @@ namespace ConsoleApp1
             }
         }
     }
+
+    public enum Classes
+    {
+        Paladin = 1,
+        Armsman = 2,
+        Scout = 3,
+        Minstrel = 4,
+        Theurgist = 5,
+        Cleric = 6,
+        Wizard = 7,
+        Sorcerer = 8,
+        Infiltrator = 9,
+        Friar = 10,
+        Mercenary = 11,
+        Necromancer = 12,
+        Cabalist = 13,
+        Reaver = 19,
+        Thane = 21,
+        Warrior = 22,
+        Shadowblade = 23,
+        Skald = 24,
+        Hunter = 25,
+        Healer = 26,
+        Spiritmaster = 27,
+        Shaman = 28,
+        Runemaster = 29,
+        Bonedancer = 30,
+        Berserker = 31,
+        Savage = 32,
+        Heretic = 33,
+        Valkyrie = 34,
+        Bainshee = 39,
+        Eldritch = 40,
+        Enchanter = 41,
+        Mentalist = 42,
+        Blademaster = 43,
+        Hero = 44,
+        Champion = 45,
+        Warden = 46,
+        Druid = 47,
+        Bard = 48,
+        Nightshade = 49,
+        Ranger = 50,
+        Animist = 55,
+        Valewalker = 56,
+        Vampiir = 58,
+        Warlock = 59,
+        MaulerAlb = 60,
+        MaulerMid = 61,
+        MaulerHib = 62
+    }
     public class FlagsType : ICloneable
     {
         [JsonConverter(typeof(BooleanConverter))]
@@ -362,7 +413,7 @@ namespace ConsoleApp1
 
         public object Clone()
         {
-            return new StatType() { stat = this.stat, value = this.value, statLimit = this.statLimit };
+            return new StatType() { stat = this.stat, value = this.value, statLimit = this.statLimit, hardCap = this.hardCap };
         }
         public override string ToString()
         {
@@ -406,7 +457,7 @@ namespace ConsoleApp1
 
         public object Clone()
         {
-            return new ResistType() { cap = this.cap, resist = this.resist, value = this.value };
+            return new ResistType() { cap = this.cap, resist = this.resist, value = this.value, hardCap = this.hardCap };
         }
 
         public override string ToString()
@@ -420,6 +471,7 @@ namespace ConsoleApp1
     public class Character : ICloneable
     {
         public string characterName { get; set; }
+        public Classes characterClass { get; set; }
         public List<SlotType> itemSlots { get; set; }
         public List<StatType> stats { get; set; }
         public List<ResistType> resists { get; set; }
@@ -431,9 +483,10 @@ namespace ConsoleApp1
         public int powerpool { get; set; }
         public int powerpoolcap { get; set; }
 
-        public Character(string newName)
+        public Character(string newName, Classes newClass = Classes.Warden)
         {
             characterName = newName;
+            characterClass = newClass;
 
             itemSlots = new List<SlotType>();
             itemSlots.Add(new SlotType { slot = Slots.Helm });
@@ -529,6 +582,11 @@ namespace ConsoleApp1
                                 r.value += b.value;
                             }
 
+                            if (r.cap > r.hardCap)
+                            {
+                                r.cap = r.hardCap;
+                            }
+
                             if (r.value > r.cap)
                             {
                                 r.value = r.cap;
@@ -576,6 +634,11 @@ namespace ConsoleApp1
                             {
                                 s.statLimit += b.value;
                                 s.value += b.value;
+                            }
+
+                            if (s.statLimit > s.hardCap)
+                            {
+                                s.statLimit = s.hardCap;
                             }
 
                             if (s.value > s.statLimit)
@@ -674,23 +737,39 @@ namespace ConsoleApp1
                 {
                     key = new Tuple<Slots, int>(s.slot, ++slotNumber); 
                 }
-                slotItems.Add(key, new SlotSearchType() { currentIndex = 0, items = hubItems.Where(x => x.slot == (int)s.slot).ToList(), charSlot = s });
+
+                var titems = hubItems.Where(x => x.slot == (int)s.slot && (x.requirements == null || x.requirements.usable_by == null || x.requirements.usable_by.Contains((int)one.characterClass))).ToList();
+                
+                // remove items that are not the highest level (hard coding these, would need some kind of look up to do better)
+                if (s.slot == Slots.Arms || s.slot == Slots.Feet || s.slot == Slots.Hands || s.slot == Slots.Legs || s.slot == Slots.Torso || s.slot == Slots.Helm)
+                {
+                    titems.RemoveAll(x => x.material != 67);
+                }
+
+                slotItems.Add(key, new SlotSearchType() { currentIndex = 0, items = titems, charSlot = s });
                 s.item = slotItems[key].items[0];
             }
+
+            // !!! ??? need to filter items by "usable-by" requirement.
 
             double max = double.MaxValue;
             double score = 0;
             Character chosenOne = new Character("Initial");
             bool looping = true;
+            Int64 counter = 0;
+
+            Console.WriteLine($"                     {string.Join(":", one.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.slot,6}").ToList())}");
+            Console.WriteLine($"                     {string.Join(":", slotItems.Select(x => $"{x.Value.items.Count,6}").ToList())}");
 
             while (looping)
             {
+                Console.Write($"{++counter}\r");
                 looping = false;
                 score = one.Evaluate();
                 if (score < max)
                 {
                     chosenOne = (Character)one.Clone();
-                    Console.WriteLine($"New Best: {score}");
+                    Console.WriteLine($"New Best: {score:000.0000} : {string.Join(":", chosenOne.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.item.id, 6}").ToList())}");
                     max = score;
                 }
 
