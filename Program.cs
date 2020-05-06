@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 
 namespace ConsoleApp1
 {
@@ -382,7 +383,7 @@ namespace ConsoleApp1
 
         public object Clone()
         {
-            return new SlotType() { slot = this.slot, item = (Item)this.item.Clone(), locked = this.locked };
+            return new SlotType() { slot = this.slot, item = (Item)this.item?.Clone(), locked = this.locked };
         }
     }
 
@@ -428,22 +429,22 @@ namespace ConsoleApp1
         Thrust = 3,
         Siege = 4,
         Heat = 10,
-        Spirit = 11,
+        Spirit2 = 11,       // Didn't find any 11
         Cold = 12,
-        Matter = 13,
-        Heat2 = 14,
-        Matter2 = 15,
+        Matter2 = 13,       // Didn't find any 13
+        Heat2 = 14,         // Didn't find any 14
+        Matter = 15,
         Body = 16,
-        Spirit2 = 17,
-        Spirit3 = 18,
-        Cold2 = 19,
-        Energy = 20,
+        Spirit = 17,
+        Spirit3 = 18,       // Didn't find any 18
+        Cold2 = 19,         // Didn't find any 19
+        Energy2 = 20,       // Didn't find any 20
         Essence = 21,
-        Energy2 = 22,
-        Cold3 = 23,
-        Body2 = 25,
-        Body3 = 26,
-        Body4 = 27
+        Energy = 22,
+        Cold3 = 23,         // Didn't find any 23
+        Body2 = 25,         // Didn't find any 25
+        Body3 = 26,         // Didn't find any 26
+        Body4 = 27          // Didn't find any 27
     }
 
     public class ResistType : ICloneable
@@ -523,7 +524,7 @@ namespace ConsoleApp1
             resists.Add(new ResistType { resist = ResistTypes.Heat, value = 0, cap = 26, hardCap = 41 });
             resists.Add(new ResistType { resist = ResistTypes.Cold, value = 0, cap = 26, hardCap = 41 });
             resists.Add(new ResistType { resist = ResistTypes.Matter, value = 0, cap = 26, hardCap = 41 });
-            resists.Add(new ResistType { resist = ResistTypes.Body,value = 0, cap = 26, hardCap = 41 });
+            resists.Add(new ResistType { resist = ResistTypes.Body, value = 0, cap = 26, hardCap = 41 });
             resists.Add(new ResistType { resist = ResistTypes.Spirit, value = 5, cap = 26, hardCap = 46 });
             resists.Add(new ResistType { resist = ResistTypes.Energy, value = 0, cap = 26, hardCap = 41 });
 
@@ -552,6 +553,7 @@ namespace ConsoleApp1
 
         public List<ResistType> Resists
         {
+            // Has to be something wrong with the math here.  Or the general idea.  Should we include the difference between the cap and max cap somehow?
             get
             {
                 var totals = resists.Select(x => (ResistType)x.Clone()).ToList();
@@ -559,7 +561,7 @@ namespace ConsoleApp1
                 {
                     foreach(SlotType s in itemSlots)
                     {
-                        if (s.item == null)
+                        if (s.item == null || s.item.bonuses == null)
                         {
                             continue;
                         }
@@ -608,7 +610,7 @@ namespace ConsoleApp1
                 {
                     foreach (SlotType i in itemSlots)
                     {
-                        if (i.item == null)
+                        if (i.item == null || i.item.bonuses == null)
                         {
                             continue;
                         }
@@ -662,15 +664,38 @@ namespace ConsoleApp1
         {
             List<StatType> eStat = Stats;
             List<ResistType> eResist = Resists;
+            #region Rev1
+            // Scoring method Rev 1
+            // This method tries to level the stat bonuses and the resist bonuses by getting a ratio of the respective values by comparing the avg of the hard limits.
+            // Get avg of stat hard caps
+            // Get avg of resist hard caps
+            // get a ratio of the avgerages
+            // sum the difference of the stat hard cap and the current stat total, divide by the ratio
+            // sum the difference of the resist hard cap and the current resist total
+            // add these two sums.  lower scores are better
 
-            double A1 = eStat.Average(x => x.hardCap);      // get the average of the stat caps
-            double A2 = eResist.Average(x => x.hardCap);    // get the average of the resist caps
-            double ratio = A1 / A2;                         // get the ratio
+            //double A1 = eStat.Where(x => x.statLimit > 0).Average(x => x.hardCap);      // get the average of the stat caps
+            //double A2 = eResist.Average(x => x.hardCap);    // get the average of the resist caps
+            //double ratio = A1 / A2;                         // get the ratio
 
-            double S1 = eStat.Sum(x => (x.hardCap - x.value) / ratio);      // sum the stat differences and apply the ratio
-            double S2 = eResist.Sum(x => (x.hardCap - x.value));            // sum the resist differences
+            //double S1 = eStat.Where(x => x.statLimit > 0).Sum(x => (x.hardCap - x.value) / ratio);      // sum the stat differences and apply the ratio
+            //double S2 = eResist.Sum(x => (x.hardCap - x.value));            // sum the resist differences
 
-            return S1 + S2;
+            //return S1 + S2;
+            #endregion
+
+            #region Rev2
+            // Scoring method Rev 2
+            // different paradigm.  
+            // (item.bonus + char.bonus - char.bonusLimit)^2 summed for all bonuses.  lowest score is best
+            // challenge is get the char.bonus values without the piece being considered.
+            // could create another eval method that takes an item param.  if the calling routine already set the slot item to null
+            // ok, don't need to consider item by item.  Can still do this just without the item bonus getting added in, since it already is.
+            double S3 = eStat.Sum(x => Math.Pow(x.value - x.hardCap, 2));
+            double S4 = eResist.Sum(x => Math.Pow(x.value - x.hardCap, 2));
+
+            return S3 + S4;
+            #endregion
         }
     }
 
@@ -689,13 +714,14 @@ namespace ConsoleApp1
             string json = File.ReadAllText(jsonFilePath);
 
             //var obj = JsonDocument.Parse(json);
-            
-            var daocItems = JsonSerializer.Deserialize<Items>(json);
-            var hubItems = daocItems.items.Where(x => x.realm == 0 || x.realm == 3).ToList();
-
             //var items = obj.RootElement.GetProperty("items").EnumerateArray();
 
+            var daocItems = JsonSerializer.Deserialize<Items>(json);
+
+            int thisRealm = 3;                              // Hibernia = 3  Should make this based on the class selected
             Character one = new Character("Tronerth");
+
+            var realmItems = daocItems.items.Where(x => x.realm == 0 || x.realm == thisRealm).ToList();
 
             // lock in the base pieces
             List<int> lockedPieces = new List<int>();
@@ -705,7 +731,7 @@ namespace ConsoleApp1
 
             foreach(int id in lockedPieces)
             {
-                Item i = hubItems.FirstOrDefault(x => x.id == id);
+                Item i = realmItems.FirstOrDefault(x => x.id == id);
                 if (i == null)
                 {
                     continue;
@@ -721,75 +747,41 @@ namespace ConsoleApp1
 
             Console.WriteLine($"Starting:\n{string.Join("\n", one.itemSlots.Where(x => x.locked).Select(x => x.item.name).ToList())}\nStats:\n{string.Join("\n", one.Stats)}\nResists:\n{string.Join("\n", one.Resists)}");
 
-            // Ok, here is here it gets busy.  
-            // get a list of all the items for each slot.
-            Dictionary<Tuple<Slots, int>, SlotSearchType> slotItems = new Dictionary<Tuple<Slots, int>, SlotSearchType>();
-            List<int> slotPieceIndexes = new List<int>();
-            foreach (var s in one.itemSlots)
+            // Search Rev1
+            // Rev 1 was a brute force exhaustive search of all possible combinations.  It would have taken forever given the number of combinations involved.
+            //  Tried to limit the number of items for each slot by material or level, but the count for the remaining slots was still too high
+
+            // Search Rev2
+            // Rev 2 uses threads.  Each thread generates a random character, by choosing a random item for each unlocked slot.  
+            //  Then it cycles through all the items for one slot and keeps the best item for that slot for this character.  Then it does the same thing for every slot.
+            //  This method doesn't try every possible combination, and it will not get a perfect result.  But should get some good results. 
+            //  Testing of Rev 2 is less than ideal results.  Trying different scoring/evaluation methods.  Since this will be key no matter what search method is used.
+
+            // Search Rev3
+            // Rev 3 will be a genetic algorithm.  Create 1000 random characters by putting a random item in each slot.  Evaluate each character.  Pick the top % to reproduce.  
+            //  Crossover can be handled by simply swapping the item in the same slot on the two parents
+            //  Mutation can be handled by selecting a new random item for the specified slot.
+            //  This method requires a good evaluation method.
+
+            int numThreads = 100;
+            List<Thread> workers = new List<Thread>();
+
+            for (int i = 0; i < numThreads; i++)
             {
-                if (s.locked)
-                { 
-                    continue;
-                }
-                int slotNumber = 1;
-                Tuple<Slots, int> key = new Tuple<Slots, int>(s.slot, slotNumber);
-                while (slotItems.ContainsKey(key))
-                {
-                    key = new Tuple<Slots, int>(s.slot, ++slotNumber); 
-                }
-
-                var titems = hubItems.Where(x => x.slot == (int)s.slot && (x.requirements == null || x.requirements.usable_by == null || x.requirements.usable_by.Contains((int)one.characterClass))).ToList();
-                
-                // remove items that are not the highest level (hard coding these, would need some kind of look up to do better)
-                if (s.slot == Slots.Arms || s.slot == Slots.Feet || s.slot == Slots.Hands || s.slot == Slots.Legs || s.slot == Slots.Torso || s.slot == Slots.Helm)
-                {
-                    titems.RemoveAll(x => x.material != 67);
-                }
-
-                slotItems.Add(key, new SlotSearchType() { currentIndex = 0, items = titems, charSlot = s });
-                s.item = slotItems[key].items[0];
+                workers.Add(new Thread(() => RoundRobinMethod(one, realmItems)));
             }
 
-            // !!! ??? need to filter items by "usable-by" requirement.
-
-            double max = double.MaxValue;
-            double score = 0;
-            Character chosenOne = new Character("Initial");
-            bool looping = true;
-            Int64 counter = 0;
-
-            Console.WriteLine($"                     {string.Join(":", one.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.slot,6}").ToList())}");
-            Console.WriteLine($"                     {string.Join(":", slotItems.Select(x => $"{x.Value.items.Count,6}").ToList())}");
-
-            while (looping)
+            foreach (var t in workers)
             {
-                Console.Write($"{++counter}\r");
-                looping = false;
-                score = one.Evaluate();
-                if (score < max)
-                {
-                    chosenOne = (Character)one.Clone();
-                    Console.WriteLine($"New Best: {score:000.0000} : {string.Join(":", chosenOne.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.item.id, 6}").ToList())}");
-                    max = score;
-                }
-
-                foreach (var s in slotItems)            // if we can complete this foreach, then it's cycled through all the items on the last slot and we are done.
-                {
-                    SlotSearchType current = s.Value;
-                    if (++current.currentIndex >= current.items.Count)
-                    {
-                        current.currentIndex = 0;
-                    }
-                    else
-                    {
-                        current.charSlot.item = current.items[current.currentIndex];
-                        looping = true;
-                        break;
-                    }
-                }
+                t.Start();
             }
 
-            Console.WriteLine($"Starting:\n{string.Join("\n", chosenOne.itemSlots.Where(x => !x.locked).Select(x => x.item.name).ToList())}\nStats:\n{string.Join("\n", chosenOne.Stats)}\nResists:\n{string.Join("\n", chosenOne.Resists)}");
+            //Console.WriteLine($"Starting:\n{string.Join("\n", chosenOne.itemSlots.Where(x => !x.locked).Select(x => x.item.name).ToList())}\nStats:\n{string.Join("\n", chosenOne.Stats)}\nResists:\n{string.Join("\n", chosenOne.Resists)}");
+
+            foreach (var t in workers)
+            {
+                t.Join();
+            }
 
             List<string> useFlags = new List<string>();
             //Dictionary<int, int> slotCounts = new Dictionary<int, int>();
@@ -849,6 +841,102 @@ namespace ConsoleApp1
             //}
 
             Console.WriteLine("Hello World!");
+        }
+
+        /// <summary>
+        /// Thread routine to do a round robin type of search.
+        /// We're going to pick a random item for each unlocked slot. 
+        /// Select a slot to start, and go through each item for that slot, keeping only the best one. 
+        /// Repeat for the next slot.  
+        /// If we go through all the slots without changing an item we are done.
+        /// </summary>
+        /// <param name="c"></param>
+        /// <param name="items"></param>
+        private static void RoundRobinMethod(Character c, List<Item> items)
+        {
+            Random rnd = new Random((int)DateTime.Now.Ticks);
+            Character me = new Character(c);       // get a deep copy of the character passed in.
+
+            // get a list of all the items for each slot.
+            Dictionary<Tuple<Slots, int>, SlotSearchType> slotItems = new Dictionary<Tuple<Slots, int>, SlotSearchType>();
+            foreach (var s in me.itemSlots)
+            {
+                if (s.locked)
+                {
+                    continue;
+                }
+                int slotNumber = 1;
+                Tuple<Slots, int> key = new Tuple<Slots, int>(s.slot, slotNumber);
+                while (slotItems.ContainsKey(key))
+                {
+                    key = new Tuple<Slots, int>(s.slot, ++slotNumber);
+                }
+
+                var titems = items.Where(x => x.slot == (int)s.slot &&
+                    //(x.slot == (int)Slots.Mythrian ||
+                    //(x.requirements != null &&
+                    //x.requirements.level_required > 48)) &&
+                    (x.requirements == null || x.requirements.usable_by == null || x.requirements.usable_by.Contains((int)me.characterClass))).ToList();
+
+                // remove items that are not the highest level (hard coding these, would need some kind of look up to do better)
+                //if (s.slot == Slots.Arms || s.slot == Slots.Feet || s.slot == Slots.Hands || s.slot == Slots.Legs || s.slot == Slots.Torso || s.slot == Slots.Helm)
+                //{
+                //    titems.RemoveAll(x => x.material != 67);
+                //}
+
+                slotItems.Add(key, new SlotSearchType() { currentIndex = 0, items = titems, charSlot = s });
+
+                int r = rnd.Next(titems.Count);     // Get a random index from the list just added
+                s.item = titems[r];                 // Assign a random item to the slot
+            }
+
+            double min = double.MaxValue;
+            double score = 0;
+            Character chosenOne = new Character(me);
+            Int64 counter = 0;
+            double chosenScore = min;
+
+            Console.WriteLine($"                     {string.Join(":", me.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.slot,6}").ToList())}");
+            Console.WriteLine($"                     {string.Join(":", slotItems.Select(x => $"{x.Value.items.Count,6}").ToList())}");
+
+            bool changed = true;
+
+            while (changed)
+            {
+                Console.Write($"{++counter}\r");
+                changed = false;
+                score = me.Evaluate();
+                if (score < min)
+                {
+                    chosenOne = new Character(me);
+                    Console.WriteLine($"N w Best: {score:000.0000} : {string.Join(":", chosenOne.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.item.id,6}").ToList())}");
+                    min = score;
+                }
+
+                foreach (var s in slotItems)            // if we can complete this foreach, then it's cycled through all the items on the last slot and we are done.
+                {
+                    SlotSearchType current = s.Value;
+                    int chosenIndex = 0;
+                    while (++current.currentIndex < current.items.Count)
+                    {
+                        current.charSlot.item = current.items[current.currentIndex];
+                        score = me.Evaluate();
+                        if (score < min)
+                        {
+                            chosenOne = new Character(me);
+                            chosenIndex = current.currentIndex;
+                            chosenScore = score;
+                            changed = true;
+                        }
+                    }
+
+                    current.charSlot.item = current.items[chosenIndex];
+                    current.currentIndex = 0;
+                }
+            }
+
+            Console.WriteLine($"New Best: {chosenScore:000.0000} : {string.Join(":", chosenOne.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.item.id,6}").ToList())}");
+            Console.WriteLine($"Finished:\n{string.Join("\n", chosenOne.itemSlots.Select(x => $"{x.slot}:{x.item.name}").ToList())}\nStats:\n{string.Join("\n", chosenOne.Stats)}\nResists:\n{string.Join("\n", chosenOne.Resists)}");
         }
     }
 }
