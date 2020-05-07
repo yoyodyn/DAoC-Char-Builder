@@ -788,7 +788,7 @@ namespace ConsoleApp1
             //  Mutation can be handled by selecting a new random item for the specified slot.
             //  This method requires a good evaluation method.
 
-            int numThreads = 1;
+            int numThreads = 100;
             List<Thread> workers = new List<Thread>();
 
             for (int i = 0; i < numThreads; i++)
@@ -802,6 +802,10 @@ namespace ConsoleApp1
             }
 
             //Console.WriteLine($"Starting:\n{string.Join("\n", chosenOne.itemSlots.Where(x => !x.locked).Select(x => x.item.name).ToList())}\nStats:\n{string.Join("\n", chosenOne.Stats)}\nResists:\n{string.Join("\n", chosenOne.Resists)}");
+
+            // getting good results now.  might not need to go to rev3 search.
+            //  Next step is to return the best combination from each thread and rank those for the output.  Also need to output to a file.  
+            // !!! ???
 
             foreach (var t in workers)
             {
