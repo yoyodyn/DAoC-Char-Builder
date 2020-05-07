@@ -518,14 +518,14 @@ namespace ConsoleApp1
             stats.Add(new StatType { stat = StatTypes.Acuity });
 
             resists = new List<ResistType>();
-            resists.Add(new ResistType { resist = ResistTypes.Crush, value = 2, cap = 26, hardCap = 43 });
-            resists.Add(new ResistType { resist = ResistTypes.Slash, value = 3, cap = 26, hardCap = 44 });
+            resists.Add(new ResistType { resist = ResistTypes.Crush, value = 2, cap = 28, hardCap = 43 });
+            resists.Add(new ResistType { resist = ResistTypes.Slash, value = 3, cap = 29, hardCap = 44 });
             resists.Add(new ResistType { resist = ResistTypes.Thrust, value = 0, cap = 26, hardCap = 42 });
             resists.Add(new ResistType { resist = ResistTypes.Heat, value = 0, cap = 26, hardCap = 41 });
             resists.Add(new ResistType { resist = ResistTypes.Cold, value = 0, cap = 26, hardCap = 41 });
             resists.Add(new ResistType { resist = ResistTypes.Matter, value = 0, cap = 26, hardCap = 41 });
             resists.Add(new ResistType { resist = ResistTypes.Body, value = 0, cap = 26, hardCap = 41 });
-            resists.Add(new ResistType { resist = ResistTypes.Spirit, value = 5, cap = 26, hardCap = 46 });
+            resists.Add(new ResistType { resist = ResistTypes.Spirit, value = 5, cap = 31, hardCap = 46 });
             resists.Add(new ResistType { resist = ResistTypes.Energy, value = 0, cap = 26, hardCap = 41 });
 
             hitpoints = 0;
@@ -583,17 +583,17 @@ namespace ConsoleApp1
                                 r.cap += b.value;
                                 r.value += b.value;
                             }
-
-                            if (r.cap > r.hardCap)
-                            {
-                                r.cap = r.hardCap;
-                            }
-
-                            if (r.value > r.cap)
-                            {
-                                r.value = r.cap;
-                            }
                         }
+                    }
+
+                    if (r.cap > r.hardCap)
+                    {
+                        r.cap = r.hardCap;
+                    }
+
+                    if (r.value > r.cap)
+                    {
+                        r.value = r.cap;
                     }
                 }
 
@@ -626,7 +626,7 @@ namespace ConsoleApp1
                             {
                                 s.statLimit += b.value;
                             }
-                            if (b.type == (int)BonusTypes.MythicalCapIncrease &&
+                            if (b.type == (int)BonusTypes.MythicalCapIncrease &&        // online char planner has this bonus adding to both stat and limit.  Will need to verify online.
                                 b.id == (int)s.stat)
                             {
                                 s.statLimit += b.value;
@@ -637,17 +637,17 @@ namespace ConsoleApp1
                                 s.statLimit += b.value;
                                 s.value += b.value;
                             }
-
-                            if (s.statLimit > s.hardCap)
-                            {
-                                s.statLimit = s.hardCap;
-                            }
-
-                            if (s.value > s.statLimit)
-                            {
-                                s.value = s.statLimit;
-                            }
                         }
+                    }
+
+                    if (s.statLimit > s.hardCap)
+                    {
+                        s.statLimit = s.hardCap;
+                    }
+
+                    if (s.value > s.statLimit)
+                    {
+                        s.value = s.statLimit;
                     }
                 }
 
@@ -691,8 +691,8 @@ namespace ConsoleApp1
             // challenge is get the char.bonus values without the piece being considered.
             // could create another eval method that takes an item param.  if the calling routine already set the slot item to null
             // ok, don't need to consider item by item.  Can still do this just without the item bonus getting added in, since it already is.
-            double S3 = eStat.Sum(x => Math.Pow(x.value - x.hardCap, 2));
-            double S4 = eResist.Sum(x => Math.Pow(x.value - x.hardCap, 2));
+            double S3 = eStat.Where(x => x.statLimit > 0).Sum(x => Math.Pow(x.value - x.hardCap, 2));
+            double S4 = eResist.Sum(x => 9 * Math.Pow(x.value - x.hardCap, 2));
 
             return S3 + S4;
             #endregion
@@ -723,29 +723,54 @@ namespace ConsoleApp1
 
             var realmItems = daocItems.items.Where(x => x.realm == 0 || x.realm == thisRealm).ToList();
 
+            // eval the base pieces of existing template
+            List<int> tempPieces = new List<int>();
+            
             // lock in the base pieces
             List<int> lockedPieces = new List<int>();
             lockedPieces.Add(30074);        // 30074 Torso
             lockedPieces.Add(30100);        // 30100 Legs
             lockedPieces.Add(30176);        // 30176 Arms
 
-            foreach(int id in lockedPieces)
+            tempPieces.Add(30074);   // 30074 Torso
+            tempPieces.Add(30100);   // 30100 Legs
+            tempPieces.Add(30176);   // 30176 Arms
+            tempPieces.Add(17077);   // helm  
+            tempPieces.Add(30474);   // hands
+            tempPieces.Add(25771);   // boots
+            tempPieces.Add(16659);   // neck
+            tempPieces.Add(17096);   // cloak
+            tempPieces.Add(16176);   // jewel
+            tempPieces.Add(38054);   // belt
+            tempPieces.Add(31394);   // ringr
+            tempPieces.Add(52215);   // ringl
+            tempPieces.Add(12301);   // bracerr
+            tempPieces.Add(26279);   // bracerl
+            tempPieces.Add(12566);   // myth
+            foreach (int id in tempPieces)
             {
                 Item i = realmItems.FirstOrDefault(x => x.id == id);
                 if (i == null)
                 {
+                    Console.WriteLine($"Could not find {id}");
                     continue;
                 }
-                SlotType s = one.itemSlots.FirstOrDefault(x => (int)x.slot == i.slot);
+                SlotType s = one.itemSlots.FirstOrDefault(x => (int)x.slot == i.slot && x.item == null);
                 if (s == null)
                 {
+                    Console.WriteLine($"Could not find empty slot {i.slot} for {id}");
                     continue;
                 }
                 s.item = i;
-                s.locked = true;
-            }
 
-            Console.WriteLine($"Starting:\n{string.Join("\n", one.itemSlots.Where(x => x.locked).Select(x => x.item.name).ToList())}\nStats:\n{string.Join("\n", one.Stats)}\nResists:\n{string.Join("\n", one.Resists)}");
+                if (lockedPieces.Contains(id))
+                {
+                    s.locked = true;
+                }
+            }
+             
+            Console.WriteLine($"Starting:\n{string.Join("\n", one.itemSlots.Select(x => x.item.name).ToList())}\nStats:\n{string.Join("\n", one.Stats)}\nResists:\n{string.Join("\n", one.Resists)}");
+            Console.WriteLine($"Template Score: ${one.Evaluate()}");
 
             // Search Rev1
             // Rev 1 was a brute force exhaustive search of all possible combinations.  It would have taken forever given the number of combinations involved.
@@ -763,7 +788,7 @@ namespace ConsoleApp1
             //  Mutation can be handled by selecting a new random item for the specified slot.
             //  This method requires a good evaluation method.
 
-            int numThreads = 100;
+            int numThreads = 1;
             List<Thread> workers = new List<Thread>();
 
             for (int i = 0; i < numThreads; i++)
@@ -916,22 +941,22 @@ namespace ConsoleApp1
                 foreach (var s in slotItems)            // if we can complete this foreach, then it's cycled through all the items on the last slot and we are done.
                 {
                     SlotSearchType current = s.Value;
-                    int chosenIndex = 0;
-                    while (++current.currentIndex < current.items.Count)
+                    Item chosenItem = current.charSlot.item;        // remember the item we have, in case we don't find anything better.
+                    double partMin = min;                           // keep a local min value for this slot
+                    foreach(Item i in current.items)
                     {
-                        current.charSlot.item = current.items[current.currentIndex];
+                        current.charSlot.item = i;
                         score = me.Evaluate();
-                        if (score < min)
+                        if (score < partMin)
                         {
-                            chosenOne = new Character(me);
-                            chosenIndex = current.currentIndex;
+                            chosenItem = i;
                             chosenScore = score;
                             changed = true;
+                            partMin = score;
                         }
                     }
 
-                    current.charSlot.item = current.items[chosenIndex];
-                    current.currentIndex = 0;
+                    current.charSlot.item = chosenItem;     // go back to the chosen item (best items from that loop
                 }
             }
 
