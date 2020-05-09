@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -56,6 +57,98 @@ namespace ConsoleApp1
         }
     }
 
+    public enum Races
+    {
+        Avalonian = 1,
+        Briton = 2,
+        Highlander = 3,
+        Saracen = 4,
+        Inconnu = 5,
+        HalfOgre = 6,
+
+        Celt = 13,
+        Elf = 14,
+        Firbolg = 15,
+        Lurikeen = 16,
+        Sylvan = 17,
+        Shar = 18,
+
+        Dwarf = 25,
+        Kobold = 26,
+        Norseman = 27,
+        Troll = 28,
+        Valkyn = 29,
+        Frostalf = 30,
+
+        Minotaur = 37,
+    }
+
+    /// <summary>
+    /// Class to represent the race of a character and include the default bonuses to stats and resists
+    /// </summary>
+    public class Race : ICloneable
+    {
+        public Races race { get; set; }
+        public List<StatType> statBonuses { get; set; }
+        public List<ResistType> resistBonuses { get; set; }
+
+        public Race(Races newRace)
+        {
+            race = newRace;
+            statBonuses = new List<StatType>();
+            resistBonuses = new List<ResistType>();
+
+            switch (newRace)
+            {
+                case Races.Celt:
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Crush, value = 2 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Slash, value = 3 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Spirit, value = 5 });
+                    break;
+                case Races.Elf:
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Slash, value = 2 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Thrust, value = 3 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Spirit, value = 5 });
+                    break;
+                case Races.Firbolg:
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Crush, value = 3 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Slash, value = 2 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Heat, value = 5 });
+                    break;
+                case Races.Lurikeen:
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Crush, value = 5 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Energy, value = 5 });
+                    break;
+                case Races.Shar:
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Crush, value = 5 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Energy, value = 5 });
+                    break;
+                case Races.Sylvan:
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Crush, value = 3 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Thrust, value = 2 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Matter, value = 5 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Energy, value = 5 });
+                    break;
+                case Races.Minotaur:
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Crush, value = 4 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Heat, value = 3 });
+                    resistBonuses.Add(new ResistType() { resist = ResistTypes.Cold, value = 3 });
+                    break;
+            }
+        }
+
+        public Race(Race toCopy)
+        {
+            race = toCopy.race;
+            statBonuses = toCopy.statBonuses?.Select(x => (StatType)x.Clone()).ToList();
+            resistBonuses = toCopy.resistBonuses?.Select(x => (ResistType)x.Clone()).ToList();
+        }
+
+        public object Clone()
+        {
+            return new Race(this);
+        }
+    }
     public enum Classes
     {
         Paladin = 1,
@@ -201,9 +294,10 @@ namespace ConsoleApp1
     }
     public class BonusType : ICloneable
     {
-        public int type { get; set; }
+        public BonusTypes type { get; set; }
         public int value { get; set; }
         public int id { get; set; }
+        public double utility { get; set; }     // utility is going to be how usefull this bonus is for the sake of scoring a configuration
 
         public object Clone()
         {
@@ -253,7 +347,7 @@ namespace ConsoleApp1
     public class RequirementsType : ICloneable
     {
         public int level_required { get; set; }
-        public List<int> usable_by { get; set; }
+        public List<Classes> usable_by { get; set; }
         public int skill_trains_required { get; set; }
         public int champion_level_required { get; set; }
 
@@ -299,7 +393,7 @@ namespace ConsoleApp1
         public string name { get; set; }
         public int category { get; set; }
         public int realm { get; set; }
-        public int slot { get; set; }
+        public Slots slot { get; set; }
         public int icon { get; set; }
         public int material { get; set; }
 
@@ -324,6 +418,21 @@ namespace ConsoleApp1
 
         //    sources { get; set; }
         public List<AbilitiesType> abilities { get; set; }
+
+        public int level
+        {
+            get
+            {
+                if ((type_data?.armor_factor ?? 0) > 0)
+                {
+                    return type_data.armor_factor / 2;
+                }
+                else
+                {
+                    return bonus_level;
+                }
+            }
+        }
 
         public object Clone()
         {
@@ -427,24 +536,24 @@ namespace ConsoleApp1
         Crush = 1,
         Slash = 2,
         Thrust = 3,
-        Siege = 4,
+        //Siege = 4,
         Heat = 10,
-        Spirit2 = 11,       // Didn't find any 11
+        //Spirit2 = 11,       // Didn't find any 11
         Cold = 12,
-        Matter2 = 13,       // Didn't find any 13
-        Heat2 = 14,         // Didn't find any 14
+        //Matter2 = 13,       // Didn't find any 13
+        //Heat2 = 14,         // Didn't find any 14
         Matter = 15,
         Body = 16,
         Spirit = 17,
-        Spirit3 = 18,       // Didn't find any 18
-        Cold2 = 19,         // Didn't find any 19
-        Energy2 = 20,       // Didn't find any 20
-        Essence = 21,
+        //Spirit3 = 18,       // Didn't find any 18
+        //Cold2 = 19,         // Didn't find any 19
+        //Energy2 = 20,       // Didn't find any 20
+        //Essence = 21,
         Energy = 22,
-        Cold3 = 23,         // Didn't find any 23
-        Body2 = 25,         // Didn't find any 25
-        Body3 = 26,         // Didn't find any 26
-        Body4 = 27          // Didn't find any 27
+        //Cold3 = 23,         // Didn't find any 23
+        //Body2 = 25,         // Didn't find any 25
+        //Body3 = 26,         // Didn't find any 26
+        //Body4 = 27          // Didn't find any 27
     }
 
     public class ResistType : ICloneable
@@ -471,8 +580,12 @@ namespace ConsoleApp1
     /// </summary>
     public class Character : ICloneable
     {
+        // going to need to add all the bonues here with values and a utility metric to be used in the scoring somehow.  Might need to change the bonus type to include the utlity score.
+        //  At some point these utility values could be class specific, at least for the starting values with the user able to modify them.
+
         public string characterName { get; set; }
         public Classes characterClass { get; set; }
+        public Race characterRace { get; set; }
         public List<SlotType> itemSlots { get; set; }
         public List<StatType> stats { get; set; }
         public List<ResistType> resists { get; set; }
@@ -484,10 +597,14 @@ namespace ConsoleApp1
         public int powerpool { get; set; }
         public int powerpoolcap { get; set; }
 
-        public Character(string newName, Classes newClass = Classes.Warden)
+        public int level { get; set; }
+
+        public Character(string newName, Classes newClass = Classes.Warden, Races newRace = Races.Celt, int newLevel = 50)
         {
             characterName = newName;
             characterClass = newClass;
+            characterRace = new Race(newRace);
+            level = newLevel;
 
             itemSlots = new List<SlotType>();
             itemSlots.Add(new SlotType { slot = Slots.Helm });
@@ -507,32 +624,40 @@ namespace ConsoleApp1
             itemSlots.Add(new SlotType { slot = Slots.Torso });
 
             stats = new List<StatType>();
-            stats.Add(new StatType { stat = StatTypes.Strength, statLimit = 75 });
-            stats.Add(new StatType { stat = StatTypes.Constitution, statLimit = 75 });
-            stats.Add(new StatType { stat = StatTypes.Dexterity, statLimit = 75 });
-            stats.Add(new StatType { stat = StatTypes.Quickness, statLimit = 75 });
-            stats.Add(new StatType { stat = StatTypes.Piety, statLimit = 75 });
+            stats.Add(new StatType { stat = StatTypes.Strength, statLimit = (int)(level * 1.5) });
+            stats.Add(new StatType { stat = StatTypes.Constitution, statLimit = (int)(level * 1.5) });
+            stats.Add(new StatType { stat = StatTypes.Dexterity, statLimit = (int)(level * 1.5) });
+            stats.Add(new StatType { stat = StatTypes.Quickness, statLimit = (int)(level * 1.5) });
+            stats.Add(new StatType { stat = StatTypes.Piety, statLimit = (int)(level * 1.5) });
             stats.Add(new StatType { stat = StatTypes.Intellegence });
             stats.Add(new StatType { stat = StatTypes.Charisma });
             stats.Add(new StatType { stat = StatTypes.Empathy });
             stats.Add(new StatType { stat = StatTypes.Acuity });
 
             resists = new List<ResistType>();
-            resists.Add(new ResistType { resist = ResistTypes.Crush, value = 2, cap = 28, hardCap = 43 });
-            resists.Add(new ResistType { resist = ResistTypes.Slash, value = 3, cap = 29, hardCap = 44 });
-            resists.Add(new ResistType { resist = ResistTypes.Thrust, value = 0, cap = 26, hardCap = 42 });
-            resists.Add(new ResistType { resist = ResistTypes.Heat, value = 0, cap = 26, hardCap = 41 });
-            resists.Add(new ResistType { resist = ResistTypes.Cold, value = 0, cap = 26, hardCap = 41 });
-            resists.Add(new ResistType { resist = ResistTypes.Matter, value = 0, cap = 26, hardCap = 41 });
-            resists.Add(new ResistType { resist = ResistTypes.Body, value = 0, cap = 26, hardCap = 41 });
-            resists.Add(new ResistType { resist = ResistTypes.Spirit, value = 5, cap = 31, hardCap = 46 });
-            resists.Add(new ResistType { resist = ResistTypes.Energy, value = 0, cap = 26, hardCap = 41 });
+
+            // y = 0.816327x + 0.199        // This is not the exact formula.  it will be +/-1 in some levels, but it's correct for level 50 (41)	
+            int baseHardCap = (int)(0.816327 * level + 0.199);
+            int baseSoftCap = (int)(level / 2 + 1);
+
+            foreach (ResistTypes r in (ResistTypes[])Enum.GetValues(typeof(ResistTypes)))
+            {
+                ResistType rb = characterRace.resistBonuses.FirstOrDefault(x => x.resist == r);
+                if (rb != null)
+                {
+                    resists.Add(new ResistType { resist = r, value = rb.value, cap = baseSoftCap + rb.value, hardCap = baseHardCap + rb.value });
+                }
+                else
+                {
+                    resists.Add(new ResistType { resist = r, value = 0, cap = baseSoftCap, hardCap = baseHardCap });
+                }
+            }
 
             hitpoints = 0;
             power = 0;
             powerpool = 0;
-            hitcap = 0;
-            powercap = 0;
+            hitcap = (int)(level * 4);
+            powercap = (int)(level / 2 + 1);
             powerpoolcap = 0;
         }
 
@@ -545,6 +670,8 @@ namespace ConsoleApp1
             hitcap = toCopy.hitcap;
             powercap = toCopy.powercap;
             powerpoolcap = toCopy.powerpoolcap;
+
+            characterRace = (Race)toCopy.characterRace.Clone();
 
             resists = toCopy.resists.Select(x => (ResistType)x.Clone()).ToList();
             itemSlots = toCopy.itemSlots.Select(x => (SlotType)x.Clone()).ToList();
@@ -567,17 +694,17 @@ namespace ConsoleApp1
                         }
                         foreach (BonusType b in s.item.bonuses)
                         {
-                            if (b.type == (int)BonusTypes.Resistance &&
+                            if (b.type == BonusTypes.Resistance &&
                                 b.id == (int)r.resist)
                             {
                                 r.value += b.value;
                             }
-                            if (b.type == (int)BonusTypes.MythicalResistanceCap &&
+                            if (b.type == BonusTypes.MythicalResistanceCap &&
                                 b.id == (int)r.resist)
                             {
                                 r.cap += b.value;
                             }
-                            if (b.type == (int)BonusTypes.MythicalResistAndCap &&
+                            if (b.type == BonusTypes.MythicalResistAndCap &&
                                 b.id == (int)r.resist)
                             {
                                 r.cap += b.value;
@@ -616,22 +743,22 @@ namespace ConsoleApp1
                         }
                         foreach (BonusType b in i.item.bonuses)
                         {
-                            if (b.type == (int)BonusTypes.Stats &&
+                            if (b.type == BonusTypes.Stats &&
                                 b.id == (int)s.stat)
                             {
                                 s.value += b.value;
                             }
-                            if (b.type == (int)BonusTypes.TOAOvercapp &&
+                            if (b.type == BonusTypes.TOAOvercapp &&
                                 b.id == (int)s.stat)
                             {
                                 s.statLimit += b.value;
                             }
-                            if (b.type == (int)BonusTypes.MythicalCapIncrease &&        // online char planner has this bonus adding to both stat and limit.  Will need to verify online.
+                            if (b.type == BonusTypes.MythicalCapIncrease &&        // online char planner has this bonus adding to both stat and limit.  Will need to verify online.
                                 b.id == (int)s.stat)
                             {
                                 s.statLimit += b.value;
                             }
-                            if (b.type == (int)BonusTypes.MythicalStatAndCapIncrease &&
+                            if (b.type == BonusTypes.MythicalStatAndCapIncrease &&
                                 b.id == (int)s.stat)
                             {
                                 s.statLimit += b.value;
@@ -707,6 +834,7 @@ namespace ConsoleApp1
     }
     class Program
     {
+        public static ConcurrentQueue<Character> finalists;
         static void Main(string[] args)
         {
             string jsonFilePath = @"C:\Projects\Roger\DAoC\daoc_item_database_combined\static_objects.json";
@@ -718,10 +846,12 @@ namespace ConsoleApp1
 
             var daocItems = JsonSerializer.Deserialize<Items>(json);
 
+            finalists = new ConcurrentQueue<Character>();
+
             int thisRealm = 3;                              // Hibernia = 3  Should make this based on the class selected
             Character one = new Character("Tronerth");
 
-            var realmItems = daocItems.items.Where(x => x.realm == 0 || x.realm == thisRealm).ToList();
+            var realmItems = daocItems.items.Where(x => (x.realm == 0 || x.realm == thisRealm)).ToList();
 
             // eval the base pieces of existing template
             List<int> tempPieces = new List<int>();
@@ -755,7 +885,7 @@ namespace ConsoleApp1
                     Console.WriteLine($"Could not find {id}");
                     continue;
                 }
-                SlotType s = one.itemSlots.FirstOrDefault(x => (int)x.slot == i.slot && x.item == null);
+                SlotType s = one.itemSlots.FirstOrDefault(x => x.slot == i.slot && x.item == null);
                 if (s == null)
                 {
                     Console.WriteLine($"Could not find empty slot {i.slot} for {id}");
@@ -793,7 +923,7 @@ namespace ConsoleApp1
 
             for (int i = 0; i < numThreads; i++)
             {
-                workers.Add(new Thread(() => RoundRobinMethod(one, realmItems)));
+                workers.Add(new Thread(() => RoundRobinMethod(i+1, one, realmItems)));
             }
 
             foreach (var t in workers)
@@ -812,7 +942,12 @@ namespace ConsoleApp1
                 t.Join();
             }
 
-            List<string> useFlags = new List<string>();
+            foreach(Character c in finalists.ToList().OrderByDescending(x => x.Evaluate()))
+            {
+                Console.WriteLine($"        : {c.Evaluate():000.0000} : {string.Join(":", c.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.item.id,6}").ToList())}");
+                //Console.WriteLine($"         \n{string.Join("\n", c.itemSlots.Select(x => x.item.name).ToList())}\nStats:\n{string.Join("\n", c.Stats)}\nResists:\n{string.Join("\n", c.Resists)}");
+            }
+            //List<string> useFlags = new List<string>();
             //Dictionary<int, int> slotCounts = new Dictionary<int, int>();
 
             //int itemCount = 0;
@@ -881,8 +1016,9 @@ namespace ConsoleApp1
         /// </summary>
         /// <param name="c"></param>
         /// <param name="items"></param>
-        private static void RoundRobinMethod(Character c, List<Item> items)
+        private static void RoundRobinMethod(int threadNumber, Character c, List<Item> items)
         {
+            int thread = threadNumber;
             Random rnd = new Random((int)DateTime.Now.Ticks);
             Character me = new Character(c);       // get a deep copy of the character passed in.
 
@@ -901,11 +1037,11 @@ namespace ConsoleApp1
                     key = new Tuple<Slots, int>(s.slot, ++slotNumber);
                 }
 
-                var titems = items.Where(x => x.slot == (int)s.slot &&
+                var titems = items.Where(x => x.slot == s.slot &&
                     //(x.slot == (int)Slots.Mythrian ||
                     //(x.requirements != null &&
                     //x.requirements.level_required > 48)) &&
-                    (x.requirements == null || x.requirements.usable_by == null || x.requirements.usable_by.Contains((int)me.characterClass))).ToList();
+                    (x.requirements == null || x.requirements.usable_by == null || x.requirements.usable_by.Contains(me.characterClass))).ToList();
 
                 // remove items that are not the highest level (hard coding these, would need some kind of look up to do better)
                 //if (s.slot == Slots.Arms || s.slot == Slots.Feet || s.slot == Slots.Hands || s.slot == Slots.Legs || s.slot == Slots.Torso || s.slot == Slots.Helm)
@@ -925,8 +1061,8 @@ namespace ConsoleApp1
             Int64 counter = 0;
             double chosenScore = min;
 
-            Console.WriteLine($"                     {string.Join(":", me.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.slot,6}").ToList())}");
-            Console.WriteLine($"                     {string.Join(":", slotItems.Select(x => $"{x.Value.items.Count,6}").ToList())}");
+            //Console.WriteLine($"                     {string.Join(":", me.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.slot,6}").ToList())}");
+            //Console.WriteLine($"                     {string.Join(":", slotItems.Select(x => $"{x.Value.items.Count,6}").ToList())}");
 
             bool changed = true;
 
@@ -938,7 +1074,7 @@ namespace ConsoleApp1
                 if (score < min)
                 {
                     chosenOne = new Character(me);
-                    Console.WriteLine($"N w Best: {score:000.0000} : {string.Join(":", chosenOne.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.item.id,6}").ToList())}");
+                    //Console.WriteLine($"N w Best: {score:000.0000} : {string.Join(":", chosenOne.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.item.id,6}").ToList())}");
                     min = score;
                 }
 
@@ -964,8 +1100,10 @@ namespace ConsoleApp1
                 }
             }
 
-            Console.WriteLine($"New Best: {chosenScore:000.0000} : {string.Join(":", chosenOne.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.item.id,6}").ToList())}");
-            Console.WriteLine($"Finished:\n{string.Join("\n", chosenOne.itemSlots.Select(x => $"{x.slot}:{x.item.name}").ToList())}\nStats:\n{string.Join("\n", chosenOne.Stats)}\nResists:\n{string.Join("\n", chosenOne.Resists)}");
+            //Console.WriteLine($"New Best: {chosenScore:000.0000} : {string.Join(":", chosenOne.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.item.id,6}").ToList())}");
+            Console.WriteLine($"{thread:####} Finished:\n{string.Join("\n", chosenOne.itemSlots.Select(x => $"{x.slot}:{x.item.name}").ToList())}\nStats:\n{string.Join("\n", chosenOne.Stats)}\nResists:\n{string.Join("\n", chosenOne.Resists)}");
+
+            finalists.Enqueue(chosenOne);
         }
     }
 }
