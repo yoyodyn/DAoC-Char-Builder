@@ -1374,7 +1374,7 @@ namespace ConsoleApp1
 
                 slotItems.Add(key, new SlotSearchType() { currentIndex = 0, items = titems, charSlot = s });
 
-                if (thread != 1)      // keeping thread #1 working on the original template
+                if (thread != 1 && s.item != null)      // keeping thread #1 working on the original template if there was an item filled in for the slot.
                 {
                     int r = rnd.Next(titems.Count);     // Get a random index from the list just added
                     s.item = titems[r];                 // Assign a random item to the slot
