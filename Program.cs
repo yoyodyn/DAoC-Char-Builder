@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -1020,12 +1021,21 @@ namespace ConsoleApp1
 
             #region Rev3
             // Enhancement to Rev2 by using emun attributes and character race and class to give priority to other bonuses besides the stat and resist.  But also weighting the stat bonuses
-            var allBonuses = itemSlots.SelectMany(i => i.item.bonuses);
+            var allBonuses = itemSlots.Where(i => i.item.bonuses != null).SelectMany(i => i.item.bonuses).ToList();
             var totalStats = stats.Select(x => (StatType)x.Clone()).ToList();
             var totalResists = resists.Select(x => (ResistType)x.Clone()).ToList();
 
+            int scoreHitpoints = hitpoints;
+            int scoreHitpointCap = hitcap;
+            int scorePowerPool = powerpool;
+            int scorePowerPoolCap = powerpoolcap;
+
+            double otherBonuses = 0;
+
             foreach (BonusType b in allBonuses)
             {
+                var classBonus = characterClass.scoringBonuses.FirstOrDefault(x => x.type == b.type);
+
                 switch (b.type)
                 {
                     case BonusTypes.Stats:
@@ -1067,7 +1077,44 @@ namespace ConsoleApp1
                             }
                         }
                         break;
+                    case BonusTypes.HitPoints:
+                        scoreHitpoints += b.value;
+                        break;
+                    case BonusTypes.TOAHitPointsCap:
+                        scoreHitpointCap += b.value;
+                        break;
+                    case BonusTypes.TOAPowerPool:
+                        scorePowerPool += b.value;
+                        break;
+                    case BonusTypes.TOAPowerPoolCap:
+                        scorePowerPoolCap += b.value;
+                        break;
+                    default:
+                        if (classBonus != null)
+                        {
+                            otherBonuses += ((classBonus.value / 10) * b.value);
+                        }
+                        break;
                 }
+            }
+
+            foreach (StatType s in totalStats.ToList())
+            {
+                if (s.statLimit > s.hardCap)
+                {
+                    s.statLimit = s.hardCap;
+                }
+                if (s.value > s.statLimit)
+                {
+                    s.value = s.statLimit;
+                }
+            }
+            foreach(ResistType r in totalResists.ToList())
+            {
+                if (r.cap > r.hardCap)
+                    r.cap = r.hardCap;
+                if (r.value > r.cap)
+                    r.value = r.cap;
             }
 
             // trying to get the stat weights from the class.  will need to reintroduce the caps in the final calculation as well.
@@ -1075,11 +1122,16 @@ namespace ConsoleApp1
                              join s2 in totalStats on s1.stat equals s2.stat
                              select new { stat = s2.stat, statLimit = s2.statLimit, hardCap = s2.hardCap, value = s2.value, weight = (float)s1.value/10 }).ToList();
 
+            // Do we need to know how much of the score each section contributed?
+            // stats are scored by subracting the hard cap from the stat value adjusted for caps and squaring it.  This makes each point for a stat bonus have a lot of weight.
+            // the result is multiplied by the class weight for that stat.  e.g. stat of STR value 100, cap 127 -27 squared 729 multiplied by 1.2, 874.8
             double S5 = joinStats.Where(x => x.weight > 0).Sum(x => (Math.Pow(x.value - x.hardCap, 2) * x.weight));
 
             double S6 = totalResists.Sum(x => 9 * Math.Pow(x.value - x.hardCap, 2));
+            double S7 = Math.Pow(scoreHitpoints - scoreHitpointCap, 2);
+            double S8 = Math.Pow(scorePowerPool - scorePowerPoolCap, 2);
 
-            return S5 + S6;
+            return S5 + S6 + S7 + S8 - Math.Pow(otherBonuses, 2);
             #endregion
         }
     }
@@ -1089,6 +1141,13 @@ namespace ConsoleApp1
         public int currentIndex { get; set; }
         public List<Item> items { get; set; }
         public SlotType charSlot { get; set; }
+    }
+
+    public class SearchThreadParameter
+    {
+        public int threadID;
+        public Character c;
+        public List<Item> items;
     }
     class Program
     {
@@ -1159,6 +1218,7 @@ namespace ConsoleApp1
              
             Console.WriteLine($"Starting:\n{string.Join("\n", one.itemSlots.Select(x => x.item.name).ToList())}\nStats:\n{string.Join("\n", one.Stats)}\nResists:\n{string.Join("\n", one.Resists)}");
             Console.WriteLine($"Template Score: ${one.Evaluate()}");
+            Console.WriteLine($"Template Score: ${one.Evaluate()}");
 
             // Search Rev1
             // Rev 1 was a brute force exhaustive search of all possible combinations.  It would have taken forever given the number of combinations involved.
@@ -1181,7 +1241,8 @@ namespace ConsoleApp1
 
             for (int i = 0; i < numThreads; i++)
             {
-                workers.Add(new Thread(() => RoundRobinMethod(i+1, one, realmItems)));
+                SearchThreadParameter s = new SearchThreadParameter { threadID = i + 1, c = one, items = realmItems };
+                workers.Add(new Thread(() => RoundRobinMethod(s)));
             }
 
             foreach (var t in workers)
@@ -1189,6 +1250,7 @@ namespace ConsoleApp1
                 t.Start();
             }
 
+            Console.WriteLine($"Template Score: ${one.Evaluate()}");
             //Console.WriteLine($"Starting:\n{string.Join("\n", chosenOne.itemSlots.Where(x => !x.locked).Select(x => x.item.name).ToList())}\nStats:\n{string.Join("\n", chosenOne.Stats)}\nResists:\n{string.Join("\n", chosenOne.Resists)}");
 
             // getting good results now.  might not need to go to rev3 search.
@@ -1274,9 +1336,12 @@ namespace ConsoleApp1
         /// </summary>
         /// <param name="c"></param>
         /// <param name="items"></param>
-        private static void RoundRobinMethod(int threadNumber, Character c, List<Item> items)
+        private static void RoundRobinMethod(SearchThreadParameter param)
         {
-            int thread = threadNumber;
+            int thread = param.threadID;
+            Character c = param.c;
+            List<Item> items = param.items;
+
             Random rnd = new Random((int)DateTime.Now.Ticks);
             Character me = new Character(c);       // get a deep copy of the character passed in.
 
@@ -1309,8 +1374,11 @@ namespace ConsoleApp1
 
                 slotItems.Add(key, new SlotSearchType() { currentIndex = 0, items = titems, charSlot = s });
 
-                int r = rnd.Next(titems.Count);     // Get a random index from the list just added
-                s.item = titems[r];                 // Assign a random item to the slot
+                if (thread != 1)      // keeping thread #1 working on the original template
+                {
+                    int r = rnd.Next(titems.Count);     // Get a random index from the list just added
+                    s.item = titems[r];                 // Assign a random item to the slot
+                }
             }
 
             double min = double.MaxValue;
@@ -1332,7 +1400,7 @@ namespace ConsoleApp1
                 if (score < min)
                 {
                     chosenOne = new Character(me);
-                    //Console.WriteLine($"N w Best: {score:000.0000} : {string.Join(":", chosenOne.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.item.id,6}").ToList())}");
+                    Console.WriteLine($"{thread:000} Best: {score:000.0000} : {string.Join(":", chosenOne.itemSlots.Where(x => !x.locked).OrderBy(x => x.slot).Select(x => $"{x.item.id,6}").ToList())}");
                     min = score;
                 }
 
