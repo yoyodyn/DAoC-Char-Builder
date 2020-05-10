@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -54,6 +56,43 @@ namespace ConsoleApp1
                     writer.WriteStringValue("false");
                     break;
             }
+        }
+    }
+    public class ResistScoredAttribute : Attribute
+    {
+        internal ResistScoredAttribute(bool scored)
+        {
+            this.Scored = scored;
+        }
+        public bool Scored { get; private set; }
+    }
+
+    public class SlotCount : Attribute
+    {
+        internal SlotCount(int count)
+        {
+            this.Count = count;
+        }
+        public int Count { get; private set; }
+    }
+
+    public class BonusScored : Attribute
+    {
+        internal BonusScored(bool scored = false)
+        {
+            this.Scored = scored;
+        }
+        public bool Scored { get; private set; }
+    }
+
+    public static class EnumExtensions
+    {
+        public static TAttribute GetAttribute<TAttribute>(this Enum value)
+            where TAttribute : Attribute
+        {
+            var type = value.GetType();
+            var name = Enum.GetName(type, value);
+            return type.GetField(name).GetCustomAttribute<TAttribute>();
         }
     }
 
@@ -199,6 +238,82 @@ namespace ConsoleApp1
         MaulerMid = 61,
         MaulerHib = 62
     }
+
+    public class DaocClass : ICloneable
+    {
+        public Classes characterClass;
+        
+        /// <summary>
+        /// using the stat type to hold an scoring factor for each stat for the class.
+        /// </summary>
+        public List<StatType> scoringStats;
+
+        /// <summary>
+        /// using the BonusType to hold a scoring factor for each bonus that items could have.
+        /// Putting this at the class level right now, but could move to the character level (or both) if feel it needs to be more specialize for each person.
+        /// </summary>
+        public List<BonusType> scoringBonuses;
+
+        public DaocClass(Classes newClass)
+        {
+            characterClass = newClass;
+
+            scoringStats = new List<StatType>();
+            scoringBonuses = new List<BonusType>();
+
+            switch (characterClass)
+            {
+                case Classes.Warden:
+                    scoringStats.Add(new StatType { stat = StatTypes.Empathy, value = 13 });
+                    scoringStats.Add(new StatType { stat = StatTypes.Strength, value = 12 });
+                    scoringStats.Add(new StatType { stat = StatTypes.Constitution, value = 11 });
+                    scoringStats.Add(new StatType { stat = StatTypes.Dexterity, value = 10 });
+                    scoringStats.Add(new StatType { stat = StatTypes.Quickness, value = 10 });
+
+                    scoringBonuses.Add(new BonusType { type = BonusTypes.TOACastSpeed, value = 10 });
+                    scoringBonuses.Add(new BonusType { type = BonusTypes.TOASpellRange, value = 10 });
+                    scoringBonuses.Add(new BonusType { type = BonusTypes.TOAMeleeSpeed, value = 10 });
+                    scoringBonuses.Add(new BonusType { type = BonusTypes.NegativeEffectDurationReduction, value = 10 });
+                    scoringBonuses.Add(new BonusType { type = BonusTypes.MythicalEnduranceRegen, value = 5 });
+                    scoringBonuses.Add(new BonusType { type = BonusTypes.BladeturnReinforcement, value = 5 });
+                    scoringBonuses.Add(new BonusType { type = BonusTypes.Block, value = 5 });
+                    scoringBonuses.Add(new BonusType { type = BonusTypes.Evade, value = 5 });
+                    scoringBonuses.Add(new BonusType { type = BonusTypes.Parry, value = 5 });
+                    break;
+            }
+
+            foreach (StatTypes s in (StatTypes[])Enum.GetValues(typeof(StatTypes)))
+            {
+                // default scoring weight is 1 for all stats.
+                if (!scoringStats.Any(x => x.stat == s))
+                {
+                    scoringStats.Add(new StatType { stat = s, value = 0 });
+                }
+            }
+
+            foreach (BonusTypes b in (BonusTypes[])Enum.GetValues(typeof(BonusTypes)))
+            {
+                if ((b.GetAttribute<BonusScored>()?.Scored ?? false) &&
+                    !scoringBonuses.Any(x => x.type == b))
+                {
+                    scoringBonuses.Add(new BonusType { type = b, value = 0 });
+                }
+            }
+        }
+
+        public DaocClass(DaocClass toCopy)
+        {
+            characterClass = toCopy.characterClass;
+
+            scoringStats = toCopy.scoringStats?.Select(x => (StatType)x.Clone()).ToList();
+            scoringBonuses = toCopy.scoringBonuses?.Select(x => (BonusType)x.Clone()).ToList();
+        }
+        public object Clone()
+        {
+            return new DaocClass(this);
+        }
+    }
+
     public class FlagsType : ICloneable
     {
         [JsonConverter(typeof(BooleanConverter))]
@@ -222,29 +337,50 @@ namespace ConsoleApp1
 
     public enum BonusTypes
     {
+        [BonusScored(false)]        // scored separately, not individually
         Stats = 1,
+        [BonusScored(false)]        // scored separately, not individually
         Skills = 2,
+        [BonusScored(true)]
         HitPoints = 4,
+        [BonusScored(false)]        // scored separately, not individually
         Resistance = 5,
+        [BonusScored(false)]        // scored separately, not individually
         Focus = 6,
+        [BonusScored(true)]
         TOAMeleeDamage = 8,
+        [BonusScored(true)]
         TOAMagicDamage = 9,
+        [BonusScored(true)]
         TOAStyleDamage = 10,
+        [BonusScored(true)]
         TOAArcheryRange = 11,
+        [BonusScored(true)]
         TOASpellRange = 12,
+        [BonusScored(true)]
         TOASpellDuration = 13,
+        [BonusScored(true)]
         TOABuffBonus = 14,
+        [BonusScored(true)]
         TOADebuffBonus = 15,
+        [BonusScored(true)]
         TOAHealBonus = 16,
+        [BonusScored(true)]
         TOAFatigue = 17,
+        [BonusScored(true)]
         TOAMeleeSpeed = 19,
+        [BonusScored(true)]
         TOAArcherySpeed = 20,
+        [BonusScored(true)]
         TOACastSpeed = 21,
+        [BonusScored(true)]
         ArmorFactor = 22,
+        [BonusScored(false)]
         CraftingMinQuality = 23,
         CraftingQuality = 24,
         CraftingSpeed = 25,
         CraftingSkillGain = 26,
+        [BonusScored(true)]
         TOAArcheryDamage = 27,
         TOAOvercapp = 28,
         TOAHitPointsCap = 29,
@@ -253,43 +389,72 @@ namespace ConsoleApp1
         TOAResistancePiece = 32,
         TOAPowerPool = 34,
         TOAArtifact = 35,
+        [BonusScored(true)]
         ArrowRecovery = 36,
+        [BonusScored(true)]
         SpellPowerCastReduction = 37,
+        [BonusScored(true)]
         Concentration = 38,
+        [BonusScored(true)]
         SafeFall = 39,
+        [BonusScored(true)]
         HealthRegeneration = 40,
+        [BonusScored(true)]
         ManaRegeneration = 41,
         PieceAblative = 42,
         DeathExperienceLossReduction = 44,
+        [BonusScored(true)]
         NegativeEffectDurationReduction = 46,
+        [BonusScored(true)]
         StyleCostReduction = 47,
+        [BonusScored(true)]
         ToHitBonus = 48,
+        [BonusScored(true)]
         DefensiveBonus = 49,
+        [BonusScored(true)]
         BladeturnReinforcement = 50,
+        [BonusScored(true)]
         Parry = 51,
+        [BonusScored(true)]
         Block = 52,
+        [BonusScored(true)]
         Evade = 53,
         ReactionaryStyleDamageBonus = 54,
+        [BonusScored(true)]
         MythicalEncumberance = 55,
         MythicalResistanceCap = 57,
         MythicalSeigeSpeed = 58,
+        [BonusScored(true)]
         MythicalParry = 60,
+        [BonusScored(true)]
         MythicalEvade = 61,
+        [BonusScored(true)]
         MythicalBlock = 62,
+        [BonusScored(true)]
         MythicalCoin = 63,
         MythicalCapIncrease = 64,
+        [BonusScored(true)]
         MythicalCrowdControlDuractionDecrease = 66,
+        [BonusScored(true)]
         MythiclEssenceResist = 67,
         MythicalResistAndCap = 68,
         MythicalSeigeDamageAblative = 69,
+        [BonusScored(true)]
         MythicalDPS = 71,
+        [BonusScored(true)]
         MythicalRealmPoints = 72,
+        [BonusScored(true)]
         MythicalSpellFocus = 73,
+        [BonusScored(true)]
         MythicalResurectionSicknessReduction = 74,
         MythicalStatAndCapIncrease = 75,
+        [BonusScored(true)]
         MythicalHealthRegen = 76,
+        [BonusScored(true)]
         MythicalPowerRegen = 77,
+        [BonusScored(true)]
         MythicalEnduranceRegen = 78,
+        [BonusScored(true)]
         MythicalPhysicalDefence = 80
     }
     public class BonusType : ICloneable
@@ -470,18 +635,31 @@ namespace ConsoleApp1
 
     public enum Slots
     {
+        [SlotCount(1)]
         Helm = 1,
+        [SlotCount(1)]
         Hands = 2,
+        [SlotCount(1)]
         Feet = 3,
+        [SlotCount(1)]
         Jewel = 4,
+        [SlotCount(1)]
         Torso = 5,
+        [SlotCount(1)]
         Cloak = 6,
+        [SlotCount(1)]
         Legs = 7,
+        [SlotCount(1)]
         Arms = 8,
+        [SlotCount(1)]
         Necklace = 9,
+        [SlotCount(1)]
         Belt = 12,
+        [SlotCount(2)]
         Bracer = 13,
+        [SlotCount(2)]
         Ring = 15,
+        [SlotCount(1)]
         Mythrian = 17
     }
     public class SlotType : ICloneable
@@ -533,27 +711,48 @@ namespace ConsoleApp1
 
     public enum ResistTypes
     {
+        [ResistScoredAttribute(true)]
         Crush = 1,
+        [ResistScoredAttribute(true)]
         Slash = 2,
+        [ResistScoredAttribute(true)]
         Thrust = 3,
-        //Siege = 4,
+        [ResistScoredAttribute(false)]
+        Siege = 4,
+        [ResistScoredAttribute(true)]
         Heat = 10,
-        //Spirit2 = 11,       // Didn't find any 11
+        [ResistScoredAttribute(false)]
+        Spirit2 = 11,       // Didn't find any 11
+        [ResistScoredAttribute(true)]
         Cold = 12,
-        //Matter2 = 13,       // Didn't find any 13
-        //Heat2 = 14,         // Didn't find any 14
+        [ResistScoredAttribute(false)]
+        Matter2 = 13,       // Didn't find any 13
+        [ResistScoredAttribute(false)]
+        Heat2 = 14,         // Didn't find any 14
+        [ResistScoredAttribute(true)]
         Matter = 15,
+        [ResistScoredAttribute(true)]
         Body = 16,
+        [ResistScoredAttribute(true)]
         Spirit = 17,
-        //Spirit3 = 18,       // Didn't find any 18
-        //Cold2 = 19,         // Didn't find any 19
-        //Energy2 = 20,       // Didn't find any 20
-        //Essence = 21,
+        [ResistScoredAttribute(false)]
+        Spirit3 = 18,       // Didn't find any 18
+        [ResistScoredAttribute(false)]
+        Cold2 = 19,         // Didn't find any 19
+        [ResistScoredAttribute(false)]
+        Energy2 = 20,       // Didn't find any 20
+        [ResistScoredAttribute(false)]
+        Essence = 21,       // not sure this is used
+        [ResistScoredAttribute(true)]
         Energy = 22,
-        //Cold3 = 23,         // Didn't find any 23
-        //Body2 = 25,         // Didn't find any 25
-        //Body3 = 26,         // Didn't find any 26
-        //Body4 = 27          // Didn't find any 27
+        [ResistScoredAttribute(false)]
+        Cold3 = 23,         // Didn't find any 23
+        [ResistScoredAttribute(false)]
+        Body2 = 25,         // Didn't find any 25
+        [ResistScoredAttribute(false)]
+        Body3 = 26,         // Didn't find any 26
+        [ResistScoredAttribute(false)]
+        Body4 = 27          // Didn't find any 27
     }
 
     public class ResistType : ICloneable
@@ -584,7 +783,7 @@ namespace ConsoleApp1
         //  At some point these utility values could be class specific, at least for the starting values with the user able to modify them.
 
         public string characterName { get; set; }
-        public Classes characterClass { get; set; }
+        public DaocClass characterClass { get; set; }
         public Race characterRace { get; set; }
         public List<SlotType> itemSlots { get; set; }
         public List<StatType> stats { get; set; }
@@ -602,37 +801,28 @@ namespace ConsoleApp1
         public Character(string newName, Classes newClass = Classes.Warden, Races newRace = Races.Celt, int newLevel = 50)
         {
             characterName = newName;
-            characterClass = newClass;
+            characterClass = new DaocClass(newClass);
             characterRace = new Race(newRace);
             level = newLevel;
 
             itemSlots = new List<SlotType>();
-            itemSlots.Add(new SlotType { slot = Slots.Helm });
-            itemSlots.Add(new SlotType { slot = Slots.Cloak });
-            itemSlots.Add(new SlotType { slot = Slots.Arms });
-            itemSlots.Add(new SlotType { slot = Slots.Belt });
-            itemSlots.Add(new SlotType { slot = Slots.Bracer });
-            itemSlots.Add(new SlotType { slot = Slots.Bracer });
-            itemSlots.Add(new SlotType { slot = Slots.Feet });
-            itemSlots.Add(new SlotType { slot = Slots.Hands });
-            itemSlots.Add(new SlotType { slot = Slots.Jewel });
-            itemSlots.Add(new SlotType { slot = Slots.Legs });
-            itemSlots.Add(new SlotType { slot = Slots.Mythrian });
-            itemSlots.Add(new SlotType { slot = Slots.Necklace });
-            itemSlots.Add(new SlotType { slot = Slots.Ring });
-            itemSlots.Add(new SlotType { slot = Slots.Ring });
-            itemSlots.Add(new SlotType { slot = Slots.Torso });
+            foreach (Slots s in (Slots[])Enum.GetValues(typeof(Slots)))
+            {
+                int count = s.GetAttribute<SlotCount>()?.Count ?? 1;
 
+                for (int i = 0; i < count; i++)
+                {
+                    itemSlots.Add(new SlotType { slot = s });
+                }
+            }
+
+            int statCap = (int)(level * 1.5);
             stats = new List<StatType>();
-            stats.Add(new StatType { stat = StatTypes.Strength, statLimit = (int)(level * 1.5) });
-            stats.Add(new StatType { stat = StatTypes.Constitution, statLimit = (int)(level * 1.5) });
-            stats.Add(new StatType { stat = StatTypes.Dexterity, statLimit = (int)(level * 1.5) });
-            stats.Add(new StatType { stat = StatTypes.Quickness, statLimit = (int)(level * 1.5) });
-            stats.Add(new StatType { stat = StatTypes.Piety, statLimit = (int)(level * 1.5) });
-            stats.Add(new StatType { stat = StatTypes.Intellegence });
-            stats.Add(new StatType { stat = StatTypes.Charisma });
-            stats.Add(new StatType { stat = StatTypes.Empathy });
-            stats.Add(new StatType { stat = StatTypes.Acuity });
+            foreach (StatTypes s in (StatTypes[])Enum.GetValues(typeof(StatTypes)))
+            {
+                stats.Add(new StatType { stat = s, statLimit = statCap });
+                // Need to add a weight to these for scoring the different classes
+            }
 
             resists = new List<ResistType>();
 
@@ -642,14 +832,17 @@ namespace ConsoleApp1
 
             foreach (ResistTypes r in (ResistTypes[])Enum.GetValues(typeof(ResistTypes)))
             {
-                ResistType rb = characterRace.resistBonuses.FirstOrDefault(x => x.resist == r);
-                if (rb != null)
+                if (r.GetAttribute<ResistScoredAttribute>().Scored)
                 {
-                    resists.Add(new ResistType { resist = r, value = rb.value, cap = baseSoftCap + rb.value, hardCap = baseHardCap + rb.value });
-                }
-                else
-                {
-                    resists.Add(new ResistType { resist = r, value = 0, cap = baseSoftCap, hardCap = baseHardCap });
+                    ResistType rb = characterRace.resistBonuses.FirstOrDefault(x => x.resist == r);
+                    if (rb != null)
+                    {
+                        resists.Add(new ResistType { resist = r, value = rb.value, cap = baseSoftCap + rb.value, hardCap = baseHardCap + rb.value });
+                    }
+                    else
+                    {
+                        resists.Add(new ResistType { resist = r, value = 0, cap = baseSoftCap, hardCap = baseHardCap });
+                    }
                 }
             }
 
@@ -672,6 +865,7 @@ namespace ConsoleApp1
             powerpoolcap = toCopy.powerpoolcap;
 
             characterRace = (Race)toCopy.characterRace.Clone();
+            characterClass = (DaocClass)toCopy.characterClass.Clone();
 
             resists = toCopy.resists.Select(x => (ResistType)x.Clone()).ToList();
             itemSlots = toCopy.itemSlots.Select(x => (SlotType)x.Clone()).ToList();
@@ -818,10 +1012,74 @@ namespace ConsoleApp1
             // challenge is get the char.bonus values without the piece being considered.
             // could create another eval method that takes an item param.  if the calling routine already set the slot item to null
             // ok, don't need to consider item by item.  Can still do this just without the item bonus getting added in, since it already is.
-            double S3 = eStat.Where(x => x.statLimit > 0).Sum(x => Math.Pow(x.value - x.hardCap, 2));
-            double S4 = eResist.Sum(x => 9 * Math.Pow(x.value - x.hardCap, 2));
+            //double S3 = eStat.Where(x => x.statLimit > 0).Sum(x => Math.Pow(x.value - x.hardCap, 2));
+            //double S4 = eResist.Sum(x => 9 * Math.Pow(x.value - x.hardCap, 2));
 
-            return S3 + S4;
+            //return S3 + S4;
+            #endregion
+
+            #region Rev3
+            // Enhancement to Rev2 by using emun attributes and character race and class to give priority to other bonuses besides the stat and resist.  But also weighting the stat bonuses
+            var allBonuses = itemSlots.SelectMany(i => i.item.bonuses);
+            var totalStats = stats.Select(x => (StatType)x.Clone()).ToList();
+            var totalResists = resists.Select(x => (ResistType)x.Clone()).ToList();
+
+            foreach (BonusType b in allBonuses)
+            {
+                switch (b.type)
+                {
+                    case BonusTypes.Stats:
+                    case BonusTypes.TOAOvercapp:
+                    case BonusTypes.MythicalCapIncrease:
+                    case BonusTypes.MythicalStatAndCapIncrease:
+                        var s = totalStats.FirstOrDefault(x => (int)x.stat == b.id);
+                        if (s != null)
+                        {
+                            if (b.type == BonusTypes.Stats ||
+                                b.type == BonusTypes.MythicalStatAndCapIncrease)
+                            {
+                                s.value += b.value;
+                            }
+
+                            if (b.type == BonusTypes.TOAOvercapp ||
+                                b.type == BonusTypes.MythicalCapIncrease ||
+                                b.type == BonusTypes.MythicalStatAndCapIncrease)
+                            {
+                                s.statLimit += b.value;
+                            }
+                        }
+                        break;
+                    case BonusTypes.Resistance:
+                    case BonusTypes.MythicalResistanceCap:
+                    case BonusTypes.MythicalResistAndCap:
+                        var r = totalResists.FirstOrDefault(x => (int)x.resist == b.id);
+                        if (r != null)
+                        {
+                            if (b.type == BonusTypes.Resistance ||
+                                b.type == BonusTypes.MythicalResistAndCap)
+                            {
+                                r.value += b.value;
+                            }
+                            if (b.type == BonusTypes.MythicalResistanceCap ||
+                                b.type == BonusTypes.MythicalResistAndCap)
+                            {
+                                r.cap += b.value;
+                            }
+                        }
+                        break;
+                }
+            }
+
+            // trying to get the stat weights from the class.  will need to reintroduce the caps in the final calculation as well.
+            var joinStats = (from s1 in characterClass.scoringStats
+                             join s2 in totalStats on s1.stat equals s2.stat
+                             select new { stat = s2.stat, statLimit = s2.statLimit, hardCap = s2.hardCap, value = s2.value, weight = (float)s1.value/10 }).ToList();
+
+            double S5 = joinStats.Where(x => x.weight > 0).Sum(x => (Math.Pow(x.value - x.hardCap, 2) * x.weight));
+
+            double S6 = totalResists.Sum(x => 9 * Math.Pow(x.value - x.hardCap, 2));
+
+            return S5 + S6;
             #endregion
         }
     }
@@ -1041,7 +1299,7 @@ namespace ConsoleApp1
                     //(x.slot == (int)Slots.Mythrian ||
                     //(x.requirements != null &&
                     //x.requirements.level_required > 48)) &&
-                    (x.requirements == null || x.requirements.usable_by == null || x.requirements.usable_by.Contains(me.characterClass))).ToList();
+                    (x.requirements == null || x.requirements.usable_by == null || x.requirements.usable_by.Contains(me.characterClass.characterClass))).ToList();
 
                 // remove items that are not the highest level (hard coding these, would need some kind of look up to do better)
                 //if (s.slot == Slots.Arms || s.slot == Slots.Feet || s.slot == Slots.Hands || s.slot == Slots.Legs || s.slot == Slots.Torso || s.slot == Slots.Helm)
